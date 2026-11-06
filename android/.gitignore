@@ -1,0 +1,8 @@
+# Secrets: the release keystore, its passwords and the bundled Kaggle token never go into git.
+keystore/
+secrets/
+local.properties
+.gradle/
+build/
+app/build/
+*.apk

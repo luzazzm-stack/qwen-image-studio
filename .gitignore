@@ -1,0 +1,18 @@
+# Never commit secrets, user data or builds
+keys/
+data/
+app/
+build/
+dist/
+demos/
+ad-source/
+smoke_out/
+*.apk
+*.jks
+keystore.properties
+local.properties
+__pycache__/
+*.pyc
+*.bak*
+build_log.txt
+.impeccable/

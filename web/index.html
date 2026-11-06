@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en" data-theme="dark" data-nav="d">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Qwen Image Studio</title>
+<link rel="icon" href="/favicon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
+<script src="https://code.iconify.design/iconify-icon/1.0.7/iconify-icon.min.js"></script>
+<meta name="theme-color" content="#000000">
+</head>
+<body>
+
+<nav class="island" id="nav" aria-label="Sections">
+  <a href="#create" data-page="create" title="Create" class="active"><iconify-icon icon="solar:magic-stick-3-linear" aria-hidden="true"></iconify-icon><b>Create</b></a>
+  <a href="#edit" data-page="edit" title="Edit a photo"><iconify-icon icon="solar:pen-new-round-linear" aria-hidden="true"></iconify-icon><b>Edit</b></a>
+  <a href="#gallery" data-page="gallery" title="My images"><iconify-icon icon="solar:gallery-wide-linear" aria-hidden="true"></iconify-icon><b>My images</b></a>
+  <a href="#queue" data-page="queue" title="Queue"><iconify-icon icon="solar:layers-minimalistic-linear" aria-hidden="true"></iconify-icon><b>Queue</b><i class="badge hidden" id="queueBadge">0</i></a>
+  <a href="#settings" data-page="settings" title="Settings"><iconify-icon icon="solar:settings-linear" aria-hidden="true"></iconify-icon><b>Settings</b></a>
+  <span class="dock-sep" aria-hidden="true"></span>
+  <button class="dock-power" id="dockPower" role="switch" aria-checked="false" aria-label="Turn the Kaggle server on or off" title="Server on / off"><span class="ping" aria-hidden="true"><i></i><i></i></span><iconify-icon icon="solar:power-linear" aria-hidden="true"></iconify-icon></button>
+</nav>
+
+<main id="main">
+<a class="logo" href="#create" data-page="create" aria-label="Qwen Image Studio home">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="2.5" y="2.5" width="19" height="19" rx="5" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="15.5" cy="8.5" r="2" fill="currentColor"/><path d="M5 18l5-6 3.5 4 2-2.3L19 18z" fill="currentColor"/></svg>
+  <span>Qwen Image Studio</span>
+</a>
+<!-- ============================== CREATE -->
+<section class="page active" id="page-create">
+  <div class="create-grid">
+    <div class="left-col">
+    <div class="glass panel compose">
+      <label class="lbl first" for="prompt">Describe your image <span class="hint" id="wordCount">0 words</span></label>
+      <textarea id="prompt" name="prompt" rows="5" autocomplete="off" placeholder="A cosy mountain teahouse at dawn in the Himalayas, prayer flags in the wind, warm light from the windows, a wooden sign that reads &quot;NAMASTE&quot;, photorealistic, 35mm photo…"></textarea>
+      <div class="improve-opts hidden" id="improveOpts" aria-live="polite"></div>
+
+      <div class="row tools">
+        <button class="btn glass-btn" id="improveBtn"><iconify-icon icon="solar:magic-stick-3-linear" aria-hidden="true"></iconify-icon><span>Improve my prompt</span></button>
+        <button class="btn ghost" id="clearBtn">Clear</button>
+      </div>
+
+      <div class="go">
+        <div class="estimate" id="estimate" aria-live="polite"></div>
+        <div class="row go-right"><span class="nsfw-badge hidden" id="nsfwBadge" title="NSFW detail is on (Settings)">NSFW on</span>
+        <button class="btn primary big" id="generateBtn">Generate<iconify-icon icon="solar:arrow-right-linear" aria-hidden="true"></iconify-icon></button></div>
+      </div>
+    </div>
+
+    <section class="glass panel activity" id="activity" aria-label="Activity">
+      <div class="act-head">
+        <div class="power-title"><span class="ping" aria-hidden="true"><i></i><i></i></span><span id="homeStatus">Server off</span></div>
+        <span class="hint" id="homeSub"></span>
+        <button class="btn small glass-btn" id="homePower">Turn on</button>
+      </div>
+      <div class="mini-queue" id="miniQueue"></div>
+      <div class="recent-head"><b>Recent images</b><a class="link" href="#gallery" data-goto="gallery">All images</a></div>
+      <div class="recent" id="homeRecent"></div>
+    </section>
+    </div>
+
+    <div class="right-col">
+    <div class="glass panel settings-panel">
+      <h2>Settings</h2>
+      <div class="lbl first">Shape</div>
+      <div class="aspects five" id="aspects" role="radiogroup" aria-label="Shape">
+        <button data-a="1:1" class="on" role="radio"><i class="shape s11"></i><b>1:1</b><span>Square</span></button>
+        <button data-a="3:4" role="radio"><i class="shape s34"></i><b>3:4</b><span>Portrait</span></button>
+        <button data-a="4:3" role="radio"><i class="shape s43"></i><b>4:3</b><span>Landscape</span></button>
+        <button data-a="9:16" role="radio"><i class="shape s916"></i><b>9:16</b><span>Story, Reels</span></button>
+        <button data-a="16:9" role="radio"><i class="shape s169"></i><b>16:9</b><span>Wide</span></button>
+      </div>
+      <p class="hint size-hint" id="sizeHint">1024 × 1024</p>
+
+      <div class="lbl">Quality</div>
+      <div class="seg small" id="qualitySeg" role="radiogroup" aria-label="Quality">
+        <button data-q="turbo" class="on" role="radio"><iconify-icon icon="solar:bolt-linear" aria-hidden="true"></iconify-icon>Turbo<small>~25 s</small></button>
+        <button data-q="quality" role="radio"><iconify-icon icon="solar:stars-minimalistic-linear" aria-hidden="true"></iconify-icon>Quality<small>~3 min</small></button>
+      </div>
+
+      <div class="lbl">How many images</div>
+      <div class="seg small" id="countSeg" role="radiogroup" aria-label="How many images">
+        <button data-n="1" class="on" role="radio">1</button><button data-n="2" role="radio">2</button>
+        <button data-n="3" role="radio">3</button><button data-n="4" role="radio">4</button>
+      </div>
+
+      <div class="toggles">
+        <label class="toggle"><input type="checkbox" id="notifyDone" name="notify" checked><span class="track"><i></i></span><span class="toggle-text">Tell me when it's done<em>a notification when the image is saved</em></span></label>
+      </div>
+
+      <details class="adv">
+        <summary><iconify-icon icon="solar:tuning-2-linear" aria-hidden="true"></iconify-icon>Advanced</summary>
+        <label class="lbl" for="seed">Seed <span class="hint">same seed + prompt = same image</span></label>
+        <div class="row"><input type="number" id="seed" name="seed" inputmode="numeric" autocomplete="off" placeholder="Random…" min="0"><button class="btn small glass-btn" id="diceBtn" aria-label="Pick a random seed"><iconify-icon icon="solar:shuffle-linear" aria-hidden="true"></iconify-icon></button><button class="btn small ghost" id="seedClear">Random</button></div>
+        <label class="lbl" for="negative">Things to avoid <span class="hint">only used in Quality mode</span></label>
+        <textarea id="negative" name="negative" rows="2" autocomplete="off" placeholder="e.g. blurry, watermark, extra fingers"></textarea>
+      </details>
+    </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== EDIT -->
+<section class="page" id="page-edit">
+  <div class="page-head"><div><h1>Edit a photo</h1></div></div>
+  <div class="enhance-grid">
+    <div class="glass panel">
+      <div class="drop edit-drop" id="eDrop" role="button" tabindex="0" aria-label="Choose a photo to edit">
+        <input type="file" id="eFile" accept="image/png,image/jpeg,image/webp" hidden>
+        <div class="drop-empty" id="eEmpty"><iconify-icon icon="solar:upload-minimalistic-linear" class="drop-icon" aria-hidden="true"></iconify-icon><b>Drop a photo here</b><span>or click to choose one (PNG, JPG or WEBP)</span></div>
+        <div class="drop-full hidden" id="eFull"><img id="eImg" alt="The photo to edit"><button class="btn small glass-btn" id="eChange">Change photo</button></div>
+      </div>
+      <label class="lbl" for="ePrompt">What should change? <span class="hint" id="eWords">0 words</span></label>
+      <textarea id="ePrompt" rows="4" autocomplete="off" placeholder="Example: make it a clear moonlit night, keep the people and the building exactly the same"></textarea>
+      <div class="improve-opts hidden" id="eImproveOpts" aria-live="polite"></div>
+      <div class="row tools">
+        <button class="btn glass-btn" id="eImproveBtn"><iconify-icon icon="solar:magic-stick-3-linear" aria-hidden="true"></iconify-icon><span>Improve my instruction</span></button>
+        <button class="btn ghost" id="eClear">Clear</button>
+      </div>
+    </div>
+    <div class="glass panel">
+      <h2>Edit</h2>
+      <div class="lbl first">How many versions</div>
+      <div class="seg small" id="eCountSeg" role="radiogroup" aria-label="How many versions">
+        <button data-n="1" class="on" role="radio">1</button><button data-n="2" role="radio">2</button>
+      </div>
+      <div class="go">
+        <div class="estimate" id="eEstimate" aria-live="polite">Choose a photo first.</div>
+        <button class="btn primary big" id="eBtn" disabled>Edit photo<iconify-icon icon="solar:arrow-right-linear" aria-hidden="true"></iconify-icon></button>
+      </div>
+      <div class="rembg">
+        <div><b>Remove background</b><p class="hint">One click: keeps the subject, removes everything behind it. About 5 minutes.</p></div>
+        <button class="btn glass-btn" id="rembgBtn" disabled><iconify-icon icon="solar:eraser-linear" aria-hidden="true"></iconify-icon>Remove background</button>
+      </div>
+      <p class="hint">The result keeps the photo's shape (about 1 megapixel). Results appear in My images. NSFW detail is never used for photo edits.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== GALLERY -->
+<section class="page" id="page-gallery">
+  <div class="page-head">
+    <div><h1>My images</h1><p id="galCount">Saved in your Pictures folder.</p></div>
+    <div class="row head-tools"><div class="search"><iconify-icon icon="solar:magnifer-linear" aria-hidden="true"></iconify-icon><input type="search" id="galSearch" name="galsearch" aria-label="Search your images" autocomplete="off" placeholder="Search by prompt…"></div><button class="btn glass-btn local-only" id="openFolderBtn"><iconify-icon icon="solar:folder-open-linear" aria-hidden="true"></iconify-icon>Open folder</button></div>
+  </div>
+  <div class="chips" id="galFilters" role="tablist" aria-label="Filter">
+    <button data-f="all" class="on">All</button><button data-f="fav">Favourites</button><button data-f="create">Created</button>
+    <button data-f="edit">Edited</button><button data-f="rembg">No background</button><button data-f="phone">From phone</button>
+  </div>
+  <div class="grid img-grid" id="galGrid"></div>
+</section>
+
+<!-- ============================== QUEUE -->
+<section class="page" id="page-queue">
+  <div class="page-head">
+    <div><h1>Queue</h1></div>
+    <button class="btn glass-btn" id="clearJobsBtn">Clear finished</button>
+  </div>
+  <div class="queue-grid">
+    <div id="jobList" class="job-list"></div>
+    <div class="side-col">
+    <section class="server glass" id="power" aria-label="Kaggle server">
+      <div class="server-head">
+        <div class="power-text" aria-live="polite">
+          <div class="power-title"><span class="ping" aria-hidden="true"><i></i><i></i></span><span id="powerTitle">Server off</span></div>
+          <div class="power-sub" id="powerSub">Turn on to make images</div>
+        </div>
+        <button class="switch" id="powerSwitch" role="switch" aria-checked="false" aria-label="Kaggle GPU server"><span class="knob"></span></button>
+      </div>
+      <div class="power-bar hidden" id="powerBar"><div id="powerBarFill"></div></div>
+      <div class="server-rows" id="gpus">
+        <div class="gpu" data-g="0"><span class="gpu-label">GPU 1</span><span class="gpu-track"><i class="gpu-fill"></i></span><span class="gpu-val">off</span></div>
+        <div class="gpu" data-g="1"><span class="gpu-label">GPU 2</span><span class="gpu-track"><i class="gpu-fill"></i></span><span class="gpu-val">off</span></div>
+        <div class="gpu quota" id="quota"><span class="gpu-label">Free hours</span><span class="gpu-track"><i class="gpu-fill" id="quotaRing"></i></span><span class="gpu-val" id="quotaVal">–</span></div>
+      </div>
+    </section>
+
+    <aside class="window glass" id="previewCard" aria-label="Latest image">
+      <div class="chrome"><span class="dots"><i></i><i></i><i></i></span><span class="chrome-title">Latest image</span><a class="link" href="#gallery" data-goto="gallery">All images</a></div>
+      <div class="window-body">
+        <div id="previewBody" class="preview-body"><div class="empty">Your images will appear here.</div></div>
+      </div>
+    </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== SETTINGS -->
+<section class="page" id="page-settings">
+  <div class="page-head"><div><h1>Settings</h1></div></div>
+  <div class="cards">
+    <article class="glass card">
+      <div class="card-icon"><iconify-icon icon="solar:battery-charge-linear" aria-hidden="true"></iconify-icon></div>
+      <h2>Saving GPU hours</h2>
+      <label class="lbl" for="setIdle">Turn off after no use <span class="hint accent" id="idleLabel"></span></label>
+      <input type="range" id="setIdle" min="5" max="90" step="5">
+      <label class="lbl" for="setMax">Longest session <span class="hint accent" id="maxLabel"></span></label>
+      <input type="range" id="setMax" min="1" max="12" step="1">
+      <p class="hint">The server also stops itself when nobody uses it, even if this laptop is off.</p>
+    </article>
+    <article class="glass card">
+      <div class="card-icon"><iconify-icon icon="solar:gallery-edit-linear" aria-hidden="true"></iconify-icon></div>
+      <h2>Defaults for new images</h2>
+      <label class="lbl" for="setAspect">Shape</label>
+      <select id="setAspect" name="aspect"><option>1:1</option><option>3:4</option><option>4:3</option><option>9:16</option><option>16:9</option></select>
+      <label class="lbl" for="setQuality">Quality</label>
+      <select id="setQuality" name="quality"><option value="turbo">Turbo</option><option value="quality">Quality</option></select>
+      <div class="lbl">Theme</div>
+      <div class="seg small" id="themeSeg"><button data-t="dark"><iconify-icon icon="solar:moon-stars-linear" aria-hidden="true"></iconify-icon>Dark</button><button data-t="light"><iconify-icon icon="solar:sun-2-linear" aria-hidden="true"></iconify-icon>Light</button></div>
+    </article>
+    <article class="glass card" id="nsfwCard">
+      <div class="card-icon"><iconify-icon icon="solar:eye-closed-linear" aria-hidden="true"></iconify-icon></div>
+      <h2>NSFW detail</h2>
+      <div class="toggles one">
+        <label class="toggle"><input type="checkbox" id="setNsfw"><span class="track"><i></i></span><span class="toggle-text">Allow adult detail<em>adds the NSFW LoRA to every new Create image</em></span></label>
+      </div>
+      <p class="hint nsfw-status" id="nsfwStatus"></p>
+      <details class="adv">
+        <summary><iconify-icon icon="solar:tuning-2-linear" aria-hidden="true"></iconify-icon>Advanced</summary>
+        <label class="lbl" for="setNsfwStrength">LoRA strength <span class="hint accent" id="nsfwStrengthLabel">1.0</span></label>
+        <input type="range" id="setNsfwStrength" min="0.2" max="1.5" step="0.05">
+        <div class="local-only">
+          <label class="lbl" for="setLoraRepo">LoRA (Hugging Face repo and file) <span class="hint">used from the next start</span></label>
+          <input id="setLoraRepo" autocomplete="off" spellcheck="false" placeholder="owner/repo">
+          <input id="setLoraFile" autocomplete="off" spellcheck="false" placeholder="file.safetensors" class="mt8">
+          <div class="row end"><button class="btn small glass-btn" id="saveLora">Save LoRA</button></div>
+        </div>
+      </details>
+      <p class="hint">Never for photo edits. Anything sexual involving minors is always blocked.</p>
+    </article>
+    <article class="glass card">
+      <div class="card-icon"><iconify-icon icon="solar:server-square-linear" aria-hidden="true"></iconify-icon></div>
+      <h2>Files and server</h2>
+      <p class="hint">Images are saved to</p>
+      <p><code id="outDir" translate="no">–</code></p>
+      <button class="btn glass-btn local-only" id="openFolderBtn2"><iconify-icon icon="solar:folder-open-linear" aria-hidden="true"></iconify-icon>Open folder</button>
+      <div class="kv spaced" id="serverInfo"></div>
+      <p class="hint licence">Qwen-Image-2.1 model licence: research and non-commercial use only.</p>
+    </article>
+    <article class="glass card" id="phoneCard">
+      <div class="card-icon"><iconify-icon icon="solar:smartphone-linear" aria-hidden="true"></iconify-icon></div>
+      <h2>Open on your phone</h2>
+      <p class="hint">Join the same Wi-Fi, then scan the code or type the address.</p>
+      <div class="qr-row"><div id="qr" class="qr" aria-label="QR code with the phone address"></div><div><div class="lan" id="lanUrl" translate="no">–</div><div class="local-only hint">PIN <b class="pin" id="pinShow">–</b></div></div></div>
+      <div class="local-only"><label class="lbl" for="setPin">Change PIN</label><div class="row"><input id="setPin" name="pin" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="4 to 8 digits…"><button class="btn small glass-btn" id="savePin">Save PIN</button></div></div>
+    </article>
+  </div>
+</section>
+</main>
+
+<!-- Image viewer modal -->
+<div class="modal hidden" id="viewer" role="dialog" aria-modal="true" aria-labelledby="vTitle">
+  <div class="modal-card glass viewer-card">
+    <div class="modal-head"><h2 id="vTitle">Image</h2><button class="x" data-close aria-label="Close"><iconify-icon icon="solar:close-circle-linear" aria-hidden="true"></iconify-icon></button></div>
+    <div class="viewer-body">
+      <div class="vimg-wrap" id="vImgWrap"><img id="vImg" alt=""></div>
+      <div class="viewer-side">
+        <div class="tags" id="vTags"></div>
+        <p class="vprompt" id="vPrompt"></p>
+        <div class="kv" id="vMeta"></div>
+        <div class="vbtns">
+          <a class="btn primary" id="vDownload" download>Download</a>
+          <button class="btn glass-btn" id="vFav">Add to favourites</button>
+          <button class="btn glass-btn" id="vReuse">Reuse prompt</button>
+          <button class="btn glass-btn" id="vVariations">Make 2 more</button>
+          <button class="btn glass-btn" id="vEdit">Edit this image</button>
+          <button class="btn glass-btn" id="vRembg">Remove background</button>
+          <button class="btn glass-btn" id="vCopy">Copy prompt</button>
+          <button class="btn glass-btn danger" id="vDelete">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm modal -->
+<div class="modal hidden" id="confirm" role="alertdialog" aria-modal="true" aria-labelledby="cTitle">
+  <div class="modal-card glass">
+    <h2 id="cTitle"></h2><p id="cText"></p>
+    <div class="row end"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="cOk">OK</button></div>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
