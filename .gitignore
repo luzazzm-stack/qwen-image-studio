@@ -1,7 +1,7 @@
 # Never commit secrets, user data or builds
 keys/
 data/
-app/
+/app/
 build/
 dist/
 demos/
@@ -16,3 +16,5 @@ __pycache__/
 *.bak*
 build_log.txt
 .impeccable/
+kaggle_token
+client.properties

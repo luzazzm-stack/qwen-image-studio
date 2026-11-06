@@ -9,7 +9,7 @@ import asyncio, json, os, random, re, secrets, shutil, socket, subprocess, sys, 
 from concurrent.futures import ThreadPoolExecutor
 
 HERE = os.environ.get("QIS_HOME") or os.path.dirname(os.path.abspath(__file__))
-DATA = os.path.join(HERE, "data")
+DATA = os.environ.get("QIS_DATA") or os.path.join(HERE, "data")   # the portable Windows build keeps data in %LOCALAPPDATA%
 WEB = os.path.join(HERE, "web")
 UPLOADS = os.path.join(DATA, "uploads")
 THUMBS = os.path.join(DATA, "thumbs")
@@ -204,7 +204,10 @@ async def power_on():
         live.update(stage="queued", pct=2, detail="Waiting for Kaggle to give us 2 GPUs")
         quota_cache["t"] = 0
     except Exception as e:
-        state.update(power="error", error=f"Could not start on Kaggle: {e}")
+        msg = str(e)
+        if "phone" in msg.lower() or "verif" in msg.lower():
+            msg = "Kaggle gives GPUs only to accounts with a verified phone number. Verify yours at kaggle.com/settings, then try again. (" + msg[:200] + ")"
+        state.update(power="error", error=f"Could not start on Kaggle: {msg}")
         save_state()
         log("power_on failed", e)
 
@@ -584,6 +587,8 @@ def lan_ip():
 
 
 async def get_quota():
+    if not kaggle_ctl.signed_in():
+        return None
     if time.time() - quota_cache["t"] > 300:
         try:
             quota_cache["v"] = await blocking(kaggle_ctl.quota)
@@ -631,14 +636,18 @@ async def api_state(req):
         "ready_at": state.get("ready_at"), "pushed_at": state.get("pushed_at"),
         "jobs": ui_jobs()[-120:], "quota": await get_quota(),
         "idle_left": (max(0, int(settings["idle_min"] * 60 - (time.time() - idle_since()))) if state["power"] == "ready" else None),
-        "settings": {k: v for k, v in settings.items() if k != "pin" or is_local(req)},
+        "settings": {**{k: v for k, v in settings.items() if (k != "pin" or is_local(req)) and k != "groq_api_key"},
+                     "groq_set": bool(settings.get("groq_api_key"))},
         "lan_url": f"http://{ip}:{PORT}" if ip else None, "local": is_local(req), "sizes": SIZES,
-        "kaggle": {"user": kaggle_ctl.USER, "kernel": kaggle_ctl.KERNEL}, "origin": state.get("origin"),
+        "kaggle": {"user": kaggle_ctl.USER, "kernel": kaggle_ctl.KERNEL, "signed_in": kaggle_ctl.signed_in(),
+                   "source": kaggle_ctl.SOURCE}, "origin": state.get("origin"),
     })
 
 
 async def api_power(req):
     d = await req.json()
+    if d.get("on") and not kaggle_ctl.signed_in():
+        return web.json_response({"error": "Sign in to Kaggle first", "signin": True}, status=409)
     asyncio.create_task(power_on() if d.get("on") else power_off("Turned off from the app"))
     return web.json_response({"ok": True})
 
@@ -709,6 +718,8 @@ def api_keys():
                 out[k.strip()] = v.strip().strip('"').strip("'")
     except OSError:
         pass
+    if settings.get("groq_api_key"):          # the public app: the user's own free Groq key (Settings)
+        out["GROQ_API_KEY"] = settings["groq_api_key"]
     return out
 
 
@@ -795,7 +806,8 @@ async def api_improve(req):
         return web.json_response({"text": text, "by": by, "took": round(time.time() - t0, 1)})
     log("online prompt helper failed:", by)
     if state["power"] != "ready" or not state.get("url"):
-        return web.json_response({"error": "The quick prompt helper is not available right now. Turn the server on to use the slower one on the Kaggle GPUs."}, status=409)
+        return web.json_response({"error": "The quick prompt helper is not set up. Turn the server on to use the slower one on the Kaggle GPUs, "
+                                           "or add a free Groq API key in Settings (then it takes about 1 second)."}, status=409)
     body = {"kind": "improve", "prompt": prompt, "mode": mode, "aspect": d.get("aspect"), "source": "laptop",
             "nsfw": bool(settings.get("nsfw")) and mode == "t2i"}
     try:
@@ -956,7 +968,43 @@ async def api_settings(req):
                 settings[k] = str(d[k]).strip()
         if "pin" in d and re.fullmatch(r"\d{4,8}", str(d["pin"])):
             settings["pin"] = str(d["pin"])
+        if "groq_api_key" in d and re.fullmatch(r"[A-Za-z0-9_\-]{0,200}", str(d["groq_api_key"]).strip()):
+            settings["groq_api_key"] = str(d["groq_api_key"]).strip()
     save("settings.json", settings)
+    return web.json_response({"ok": True})
+
+
+async def api_signin(req):
+    """The sign-in page (laptop only): checks the token with Kaggle, then keeps it in data/kaggle_token."""
+    if not is_local(req):
+        return web.json_response({"error": "Sign in on the computer"}, status=403)
+    d = await req.json()
+    try:
+        user, token = await blocking(kaggle_ctl.check_token, str(d.get("username") or ""), str(d.get("token") or ""))
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=400)
+    except Exception as e:
+        return web.json_response({"error": f"Could not reach Kaggle: {e}"}, status=502)
+    if not re.fullmatch(r"[A-Za-z0-9_.\-]{1,80}", user):
+        return web.json_response({"error": "That username looks wrong"}, status=400)
+    settings["kaggle_user"] = user
+    save("settings.json", settings)
+    kaggle_ctl.save_sign_in(user, token)
+    quota_cache["t"] = 0
+    log("signed in to Kaggle as", user)
+    return web.json_response({"ok": True, "user": user})
+
+
+async def api_signout(req):
+    if not is_local(req):
+        return web.json_response({"error": "Sign out on the computer"}, status=403)
+    if state["power"] in ("starting", "ready", "stopping"):
+        return web.json_response({"error": "Turn the server off first"}, status=409)
+    settings.pop("kaggle_user", None)
+    save("settings.json", settings)
+    kaggle_ctl.sign_out()
+    quota_cache.update(t=0, v=None)
+    log("signed out of Kaggle")
     return web.json_response({"ok": True})
 
 
@@ -1042,6 +1090,7 @@ def make_app():
         web.get("/api/library", api_library), web.post("/api/library/{id}", api_lib_update), web.delete("/api/library/{id}", api_lib_delete),
         web.post("/api/library/{id}/use", api_lib_to_upload),
         web.post("/api/upload", api_upload), web.post("/api/settings", api_settings), web.get("/api/pairing", api_pairing),
+        web.post("/api/signin", api_signin), web.post("/api/signout", api_signout),
         web.post("/api/open-folder", api_open_folder), web.post("/api/show", api_show),
         web.get("/media/{name}", media), web.get("/thumbs/{name}", thumb), web.get("/uploads/{name}", upload_file),
         web.static("/", WEB),

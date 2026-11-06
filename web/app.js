@@ -65,7 +65,7 @@ document.addEventListener("click", e => { const g = e.target.closest("[data-goto
 async function poll() {
   try {
     S = await api("/api/state");
-    renderTop(); renderJobs(); checkFinished(); renderEstimate(); renderEditState(); renderNsfw();
+    renderTop(); renderJobs(); checkFinished(); renderEstimate(); renderEditState(); renderNsfw(); maybeSignIn();
   } catch (e) { /* offline: keep last state */ }
   setTimeout(poll, document.hidden ? 8000 : 2000);
 }
@@ -134,7 +134,9 @@ $("#powerSwitch").onclick = async () => {
     await api("/api/power", { json: { on: false } });
     toast("Turning off…");
   } else {
-    await api("/api/power", { json: { on: true } });
+    if (needsSignIn()) return showSignIn();
+    try { await api("/api/power", { json: { on: true } }); }
+    catch (e) { return toast(esc(e.message), "bad"); }
     toast("Starting the Kaggle server. It takes about 6 minutes. You can queue images now.");
   }
   setTimeout(poll, 400);
@@ -278,6 +280,7 @@ function renderEstimate() {
 
 async function offerPowerOn(what) {
   if (S && (S.power === "off" || S.power === "error")) {
+    if (needsSignIn()) return showSignIn();
     if (await confirmBox("Turn on the server?", `The Kaggle GPU server is off. Turn it on now? It takes about 6 minutes, then ${what} starts automatically.`, "Turn on"))
       await api("/api/power", { json: { on: true } });
   }
@@ -502,6 +505,12 @@ function renderSettings() {
   if (document.activeElement !== $("#setLoraFile")) $("#setLoraFile").value = st.nsfw_lora_file || "";
   $("#nsfwStatus").textContent = nsfwStatusText();
   $("#outDir").textContent = st.output_dir;
+  const k = S.kaggle || {};
+  $("#accText").innerHTML = k.signed_in ? `Signed in as <b>${esc(k.user)}</b>. The server runs in your account (<code translate="no">${esc(k.kernel)}</code>).`
+    : "Not signed in. Sign in to turn the Kaggle server on.";
+  $("#signInBtn2").classList.toggle("hidden", !!k.signed_in);
+  $("#signOutBtn").classList.toggle("hidden", k.source !== "app");
+  $("#setGroq").placeholder = st.groq_set ? "saved (type a new key to replace it)" : "gsk_…";
   $("#pinShow").textContent = st.pin || "••••";
   $("#lanUrl").textContent = S.lan_url || "Not connected to Wi-Fi";
   if (S.lan_url && window.QRCode && $("#qr").dataset.u !== S.lan_url) {
@@ -509,7 +518,7 @@ function renderSettings() {
   }
   const t = S.live.timings || {}, pe = S.live.pe || {};
   const peText = S.power !== "ready" ? "off" : pe.t2i === true && pe.i2i === true ? "ready" : pe.t2i === "failed" ? "failed to download" : "downloading…";
-  $("#serverInfo").innerHTML = [["Status", S.power], ["Kaggle", S.kaggle ? S.kaggle.kernel : "–"], ["Up for", S.live.uptime ? fmtMin(S.live.uptime) : "–"],
+  $("#serverInfo").innerHTML = [["Status", S.power], ["Kaggle", (S.kaggle && S.kaggle.kernel) || "not signed in"], ["Up for", S.live.uptime ? fmtMin(S.live.uptime) : "–"],
     ["Start-up time", t.ready_s ? fmtMin(t.ready_s) : "–"], ["Prompt helper", peText],
     ["GPU hours", S.quota ? `${S.quota.used_h.toFixed(1)} used of ${S.quota.total_h}` : "–"]].map(([k, v]) => `<span>${k}</span><span>${esc(v)}</span>`).join("");
 }
@@ -529,6 +538,43 @@ $("#savePin").onclick = async () => {
   const v = $("#setPin").value.trim();
   if (!/^\d{4,8}$/.test(v)) return toast("PIN must be 4 to 8 digits");
   await saveSetting({ pin: v }); $("#setPin").value = ""; toast("PIN changed. Phones will need the new PIN.", "good");
+};
+
+// ------------------------------------------------------------------ Kaggle sign-in (public app)
+let signInLater = false;
+const needsSignIn = () => !!(S && S.local && S.kaggle && !S.kaggle.signed_in);
+function showSignIn() {
+  $("#siErr").classList.add("hidden");
+  $("#signin").classList.remove("hidden");
+  setTimeout(() => ($("#siUser").value ? $("#siToken") : $("#siUser")).focus(), 50);
+}
+function maybeSignIn() { if (needsSignIn() && !signInLater && $("#signin").classList.contains("hidden")) showSignIn(); }
+$("#siLater").onclick = () => { signInLater = true; $("#signin").classList.add("hidden"); };
+$("#siGo").onclick = async () => {
+  const username = $("#siUser").value.trim(), token = $("#siToken").value.trim();
+  const err = m => { $("#siErr").textContent = m; $("#siErr").classList.remove("hidden"); };
+  if (!token) return err("Paste your API token from kaggle.com/settings.");
+  $("#siGo").disabled = true; $("#siGo").textContent = "Checking…";
+  try {
+    const r = await api("/api/signin", { json: { username, token } });
+    $("#siToken").value = ""; $("#signin").classList.add("hidden");
+    toast(`Signed in as <b>${esc(r.user)}</b>. Press the power button to start your server.`, "good");
+    S = await api("/api/state"); renderTop(); renderSettings();
+  } catch (e) { err(e.message); }
+  finally { $("#siGo").disabled = false; $("#siGo").textContent = "Sign in"; }
+};
+$("#siToken").onkeydown = e => { if (e.key === "Enter") $("#siGo").click(); };
+$("#signInBtn2").onclick = showSignIn;
+$("#signOutBtn").onclick = async () => {
+  if (!await confirmBox("Sign out of Kaggle?", "The token is removed from this computer. Your images stay.", "Sign out")) return;
+  try { await api("/api/signout", { json: {} }); signInLater = true; toast("Signed out."); S = await api("/api/state"); renderSettings(); renderTop(); }
+  catch (e) { toast(esc(e.message), "bad"); }
+};
+$("#saveGroq").onclick = async () => {
+  const v = $("#setGroq").value.trim();
+  if (v && !/^[A-Za-z0-9_-]{10,200}$/.test(v)) return toast("That does not look like a Groq key", "bad");
+  await saveSetting({ groq_api_key: v }); $("#setGroq").value = "";
+  toast(v ? "Groq key saved. Improve my prompt is now quick." : "Groq key removed.", "good");
 };
 
 // ------------------------------------------------------------------ boot

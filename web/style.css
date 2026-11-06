@@ -114,7 +114,7 @@ main { position: relative; z-index: 10; max-width: 1280px; margin: 0 auto; paddi
 
 /* ---------- controls */
 .lbl { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-weight: 500; font-size: 13.5px; margin: 20px 0 8px; color: var(--text-2); }
-textarea, input[type=number], input[type=search], input:not([type]), select {
+textarea, input[type=number], input[type=search], input:not([type]), input[type=password], select {
   width: 100%; background: rgba(0,0,0,.35); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; outline: none; transition: border-color .3s, box-shadow .3s; }
 [data-theme="light"] textarea, [data-theme="light"] input:not([type=range]):not([type=checkbox]), [data-theme="light"] select { background: rgba(255,255,255,.7); }
 select { color: var(--text); }
@@ -306,6 +306,10 @@ input[type=range] { width: 100%; accent-color: var(--accent); }
 .modal-card.glass { background: rgba(24,24,27,.88); }
 [data-theme="light"] .modal-card.glass { background: rgba(255,255,255,.94); }
 .modal-card.wide { width: min(820px, 100%); }
+.si-steps { margin: 12px 0 4px; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; color: var(--text-2); line-height: 1.5; }
+.err-text { color: var(--bad); margin-top: 10px; }
+#signin .modal-card.glass { background: rgba(20,20,23,.97); }
+[data-theme="light"] #signin .modal-card.glass { background: rgba(255,255,255,.98); }
 .modal-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 8px; }
 .modal-head h2 { margin: 0; }
 .x { background: none; border: 0; color: var(--muted); font-size: 22px; cursor: pointer; padding: 4px; border-radius: 999px; display: grid; place-items: center; }

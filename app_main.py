@@ -1,17 +1,25 @@
 """Qwen Image Studio for Windows: the app window (WebView2) plus the local server in one program.
 
-Built into app/QwenImageStudio/QwenImageStudio.exe with PyInstaller. Data and the UI files stay in the project folder,
-so the app can be updated without rebuilding.
+Personal build (build_app.sh): app/QwenImageStudio/QwenImageStudio.exe; data and the UI files stay in the project
+folder, so the app can be updated without rebuilding.
+Public build (build_client.sh): one portable folder with web/, kaggle/ and prompts/ next to the exe; its data (sign-in,
+settings, queue) lives in %LOCALAPPDATA%/Qwen Image Studio, never next to the exe.
 """
 import ctypes, json, os, sys, threading, time, urllib.request
 
 if getattr(sys, "frozen", False):
-    HOME = os.path.abspath(os.path.join(os.path.dirname(sys.executable), "..", ".."))
+    EXE_DIR = os.path.dirname(sys.executable)
+    if os.path.isdir(os.path.join(EXE_DIR, "web")):          # portable public build
+        HOME = EXE_DIR
+        os.environ.setdefault("QIS_DATA", os.path.join(os.environ.get("LOCALAPPDATA") or os.path.expanduser("~"), "Qwen Image Studio", "data"))
+    else:
+        HOME = os.path.abspath(os.path.join(EXE_DIR, "..", ".."))
 else:
     HOME = os.path.dirname(os.path.abspath(__file__))
 os.environ["QIS_HOME"] = HOME
-os.makedirs(os.path.join(HOME, "data"), exist_ok=True)
-sys.stdout = sys.stderr = open(os.path.join(HOME, "data", "app.log"), "a", buffering=1, encoding="utf-8")
+DATA = os.environ.get("QIS_DATA") or os.path.join(HOME, "data")
+os.makedirs(DATA, exist_ok=True)
+sys.stdout = sys.stderr = open(os.path.join(DATA, "app.log"), "a", buffering=1, encoding="utf-8")
 sys.path.insert(0, HOME)
 
 URL = "http://127.0.0.1:8766"

@@ -8,6 +8,32 @@ import os, secrets, socket, subprocess, sys, time
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 USER, SLUG = "local-test", "fake-kernel"
 KERNEL = f"{USER}/{SLUG}"
+SOURCE = "fake"
+SIGNINS = []          # sign-in attempts (tests); token "bad" is refused
+
+
+def signed_in():
+    return SOURCE is not None
+
+
+def check_token(user, token):
+    SIGNINS.append(user)
+    if not token or token == "bad":
+        raise ValueError("Kaggle did not accept that token.")
+    return (user or "local-test"), token
+
+
+def save_sign_in(user, token):
+    global SOURCE, USER, KERNEL
+    SOURCE, USER = "app", user
+    KERNEL = f"{USER}/{SLUG}"
+    return True
+
+
+def sign_out():
+    global SOURCE, USER, KERNEL
+    SOURCE = USER = KERNEL = None
+    return False
 GW_PORT = os.environ.get("QIS_GATEWAY_PORT", "8790")
 WORK = os.path.join(HERE, "data", "_fake_kernel")
 _proc = {"p": None, "t": 0}

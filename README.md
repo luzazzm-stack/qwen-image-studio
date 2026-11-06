@@ -1,11 +1,37 @@
 # Qwen Image Studio
 
-Make and edit pictures with **Qwen-Image-2.1** running on your free Kaggle GPUs (2× T4, account `leomaharjan`).
-Same look and habits as Wan Studio.
+Make and edit pictures with **Qwen-Image-2.1** running on **your own free Kaggle GPUs** (2× T4). Windows app and Android app.
+
+## Download
+
+| | |
+|---|---|
+| **Windows** (10 / 11) | [**QwenImageStudio-Windows.zip**](https://github.com/luzazzm-stack/qwen-image-studio/releases/latest/download/QwenImageStudio-Windows.zip) |
+| **Android** (8.0 or newer) | [**QwenImageStudio-Android.apk**](https://github.com/luzazzm-stack/qwen-image-studio/releases/latest/download/QwenImageStudio-Android.apk) |
+
+All versions: [github.com/luzazzm-stack/qwen-image-studio/releases/latest](https://github.com/luzazzm-stack/qwen-image-studio/releases/latest)
+
+**Setup in 3 steps**
+1. Make a free [Kaggle account](https://www.kaggle.com/account/login?phase=startRegisterTab) and **verify your phone number**
+   at [kaggle.com/settings](https://www.kaggle.com/settings). Kaggle only gives GPUs to phone-verified accounts.
+2. On [kaggle.com/settings](https://www.kaggle.com/settings), in the **API** section, press **Create New Token** and copy it.
+3. Open the app and sign in with your Kaggle username and that token. Press the power button: your server is ready in about 6 minutes.
+
+- **Windows:** unzip, open the folder, double-click **QwenImageStudio.exe**. If Windows says "Windows protected your PC",
+  press **More info → Run anyway** (the app is not signed by a company). Your sign-in and settings are kept in
+  `%LOCALAPPDATA%\Qwen Image Studio`, your pictures in `Pictures\Qwen Image Studio`.
+- **Android:** open the downloaded file and allow "install unknown apps" for your browser when asked.
+- Optional (Windows): a free [Groq API key](https://console.groq.com/keys) in **Settings** makes **Improve my prompt** take about 1 second.
+
+Everything runs in your own Kaggle account with your free GPU hours (about 30 h a week). Your token stays on your
+computer or phone and is used only to start and stop your own server.
+
+**Licence:** the Qwen-Image-2.1 model is for research and non-commercial use only.
 
 ## Start
-Double-click **Qwen Image Studio** on the desktop (or the Start menu). Press the power button in the dock to turn the
-Kaggle server on: about **5–7 minutes** the first time each session. You can queue images before it is ready.
+Double-click **Qwen Image Studio** on the desktop (or the Start menu). The first time, sign in to Kaggle (see above).
+Press the power button in the dock to turn the Kaggle server on: about **5–7 minutes** the first time each session.
+You can queue images before it is ready.
 
 - **Create**: describe the image, pick a shape (1:1, 3:4, 4:3, 9:16, 16:9, about 1 megapixel each), Turbo (~25 s) or
   Quality (~3 min), 1–4 images. The two GPUs share the work. Advanced: seed and things to avoid.
@@ -21,7 +47,7 @@ Kaggle server on: about **5–7 minutes** the first time each session. You can q
 ## How it works
 ```
 Windows app (app_main.py: window + server.py on :8766)        phone browser (PIN)
-        |  power on: kaggle_ctl.push()  ->  Kaggle kernel leomaharjan/qwen-image-studio-server
+        |  power on: kaggle_ctl.push()  ->  Kaggle kernel <your user>/qwen-image-studio-server
         |  finds the server's address on ntfy.sh/<topic>
         v
 Kaggle gateway (kaggle/qis_server.py, Cloudflare quick tunnel, header X-Key)
@@ -91,10 +117,27 @@ While the Windows app is off it checks the topic every 60 s and joins a server s
 After the laptop turns a server off it ignores that session's old messages.
 
 ## Kaggle account (one place)
-`kaggle_ctl.py` holds everything account-specific; `data/settings.json` can override it:
-`kaggle_user` (leomaharjan), `kaggle_slug` (qwen-image-studio-server), `kaggle_token_file` (`~/.kaggle-leo6/access_token`).
-`KAGGLE_CONFIG_DIR` points at that token's folder, never `~/.kaggle`. A client app with per-user Kaggle sign-in only
-needs these three values plus its own topic and key.
+`kaggle_ctl.py` holds everything account-specific and reads nothing at import time, so the app starts signed out.
+Where the account comes from, in order:
+1. The app's **sign-in page** (public app): the token is checked with Kaggle (`IntrospectToken`, or a quota call for a
+   legacy 32-hex key), then saved in `data/kaggle_token`; the username goes into `data/settings.json` (`kaggle_user`).
+   **Settings → Kaggle account → Sign out** deletes it (only while the server is off).
+2. `data/settings.json` `kaggle_token_file` (+ `kaggle_user`): a token file kept elsewhere.
+3. The original personal setup `~/.kaggle-leo6/access_token` (user `leomaharjan`), only when that file exists.
+
+`kaggle_slug` defaults to `qwen-image-studio-server` (in the user's own account). `KAGGLE_CONFIG_DIR` never points at
+`~/.kaggle`. Each install makes its own random gateway key and ntfy topic (`data/state.json`).
+
+## Two editions
+| | Personal (owner only, never published) | Public (GitHub release) |
+|---|---|---|
+| Windows | `build_app.sh` → `app\QwenImageStudio\QwenImageStudio.exe`, data in the project folder | `build_client.sh` → `build\QwenImageStudio-Windows.zip` (portable folder with `web/`, `kaggle/`, `prompts/`; data in `%LOCALAPPDATA%\Qwen Image Studio`; nothing from `data/`) |
+| Android | flavor `personal`, `app.qwenimagestudio.personal`, account bundled at build time from `data/` + the token file | flavor `client`, `app.qwenimagestudio`, sign-in on the phone (token encrypted with an Android Keystore key), own random key + topic |
+| Build | `gradlew assemblePersonalRelease` | `gradlew assembleClientRelease` (signed with `android/keystore/qis-client.jks`, passwords in `keystore/client.properties`; both gitignored) |
+
+Prompt helper on Windows: the user's own Groq key from **Settings** (`groq_api_key` in `data/settings.json`, never
+sent to phones), else the keys in `keys_env` / `~/OneDrive/Documents/my-api-keys.env` if that file exists, else the
+slower prompt enhancer on the Kaggle GPUs.
 
 ## Files
 - `app_main.py`: the Windows app (pywebview window + server). Built into `app\QwenImageStudio\QwenImageStudio.exe`.
@@ -107,6 +150,8 @@ needs these three values plus its own topic and key.
   `tests/test_phone_flows.py SCRATCH_DIR`: joining a phone-started server, attach-while-off, delete, idle rules (21 checks).
   `tests/live_run.py`, `tests/live_diag_rembg.py`: the live Kaggle test driver and the background-removal diagnostic.
 - `tools/fake_comfy.py`, `tools/fake_kaggle.py`: local stand-ins (no GPU, no Kaggle). `tools/shots.py`: UI screenshots. `tools/make_icon.py`.
+- `build_client.sh`: the public Windows build (portable zip). `tests/test_signin.py SCRATCH_DIR`: sign-in checks
+  (signed-out start, bad token, Groq key, sign out; optional real-token check with `QIS_TEST_TOKEN_FILE`).
 - `build_app.sh`: rebuild the exe after changing `server.py`, `kaggle_ctl.py` or `app_main.py` (uses Wan Studio's
   `.venv-app` Python). `web/`, `kaggle/`, `prompts/` changes need only an app restart. `Qwen Image Studio.vbs`: fallback launcher.
 
@@ -117,7 +162,8 @@ $PY -B tests/test_kernel.py                                   # unit tests
 QIS_HOME=<copy of the project> QIS_FAKE_KAGGLE=1 $PY -B server.py &   # kernel runs locally with fake ComfyUIs
 $PY -B tests/test_e2e.py                                      # 39 checks: outbox, power, queue, both GPUs, PE, safety, NSFW, cancel, power off
 ```
-Use a copy of the project with its own `data/settings.json` (`output_dir`) so test images don't land in Pictures.
+Use a copy of the project with its own `data/settings.json` (`output_dir`, and `keys_env` pointing at a missing file so the
+prompt-helper check uses the Kaggle helper) so test images don't land in Pictures.
 
 ## Speed and GPU hours (live test 2026-11-05, 2x T4, through the app)
 | Step | Time | Result |

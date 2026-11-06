@@ -1,46 +1,171 @@
-"""Kaggle control for Qwen Image Studio: push (start), delete (hard stop), status and GPU quota.
+"""Kaggle control for Qwen Image Studio: sign-in, push (start), delete (hard stop), status and GPU quota.
 
-EVERYTHING that depends on the Kaggle account lives here (and can be overridden in data/settings.json):
-  kaggle_user        Kaggle username                (default leomaharjan)
-  kaggle_slug        kernel slug                    (default qwen-image-studio-server)
-  kaggle_token_file  file holding the API token     (default ~/.kaggle-leo6/access_token)
-A future "client" app signs each user in with their own account: it only needs these three values.
+EVERYTHING that depends on the Kaggle account lives here. Where the account comes from, in order:
+  1. The app's own sign-in page: the token is saved in data/kaggle_token, the username in data/settings.json
+     (kaggle_user). This is how the public app works: every user brings their own Kaggle account.
+  2. data/settings.json kaggle_token_file (+ kaggle_user): a token file kept somewhere else.
+  3. The original personal setup: ~/.kaggle-leo6/access_token (user leomaharjan), only when that file exists.
+Nothing is read at import time, so the app starts fine when nobody is signed in yet.
+kaggle_slug (default qwen-image-studio-server) can be changed in data/settings.json.
+~/.kaggle/kaggle.json is never read or written: KAGGLE_CONFIG_DIR always points somewhere else.
 """
-import base64, json, os, secrets, shutil, tempfile
+import base64, json, os, re, secrets, shutil, tempfile, urllib.error, urllib.request
 
 HERE = os.environ.get("QIS_HOME") or os.path.dirname(os.path.abspath(__file__))
-DEFAULTS = {"kaggle_user": "leomaharjan", "kaggle_slug": "qwen-image-studio-server",
-            "kaggle_token_file": os.path.join(os.path.expanduser("~"), ".kaggle-leo6", "access_token")}
+DATA = os.environ.get("QIS_DATA") or os.path.join(HERE, "data")
+TOKEN_FILE = os.path.join(DATA, "kaggle_token")          # written by the sign-in page, never shipped
+DEFAULT_SLUG = "qwen-image-studio-server"
+OWNER_TOKEN_FILE = os.path.join(os.path.expanduser("~"), ".kaggle-leo6", "access_token")
+OWNER_USER = "leomaharjan"
+API = "https://api.kaggle.com/v1"
 
-
-def account():
-    try:
-        s = json.load(open(os.path.join(HERE, "data", "settings.json"), encoding="utf-8"))
-    except Exception:
-        s = {}
-    return {k: (s.get(k) or v) for k, v in DEFAULTS.items()}
-
-
-ACC = account()
-USER, SLUG = ACC["kaggle_user"], ACC["kaggle_slug"]
-KERNEL = f"{USER}/{SLUG}"
-os.environ.setdefault("KAGGLE_API_TOKEN", open(os.path.expanduser(ACC["kaggle_token_file"]), encoding="utf-8").read().strip())
-# Own config dir (never touches ~/.kaggle/kaggle.json, which belongs to another account)
-os.environ.setdefault("KAGGLE_CONFIG_DIR", os.path.dirname(os.path.expanduser(ACC["kaggle_token_file"])))
-
-from kaggle.api.kaggle_api_extended import KaggleApi  # noqa: E402
-
+USER = SLUG = KERNEL = None
+SOURCE = None            # "app" (signed in here), "file" (token file), or None (signed out)
 _api = None
+_env_set = []
+
+
+class NotSignedIn(RuntimeError):
+    pass
+
+
+def _settings():
+    try:
+        return json.load(open(os.path.join(DATA, "settings.json"), encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _read(path):
+    try:
+        return open(os.path.expanduser(path), encoding="utf-8").read().strip() or None
+    except OSError:
+        return None
+
+
+def parse_token(text, user=""):
+    """Accepts a new API token (KGAT_...), a legacy key (32 hex) or a pasted kaggle.json. Returns (user, token)."""
+    text = (text or "").strip()
+    if text.startswith("{"):
+        try:
+            j = json.loads(text)
+            return (j.get("username") or user or "").strip(), (j.get("key") or "").strip()
+        except ValueError:
+            pass
+    return (user or "").strip(), text
+
+
+def is_legacy(token):
+    return bool(re.fullmatch(r"[0-9a-f]{32}", token or ""))
+
+
+def _set_env(k, v):
+    os.environ[k] = v
+    if k not in _env_set:
+        _env_set.append(k)
+
+
+def configure():
+    """(Re)reads the account. Returns True when signed in."""
+    global USER, SLUG, KERNEL, SOURCE, _api
+    _api = None
+    for k in _env_set:                       # forget what an earlier account put into the environment
+        os.environ.pop(k, None)
+    _env_set.clear()
+    s = _settings()
+    SLUG = s.get("kaggle_slug") or DEFAULT_SLUG
+    USER, SOURCE = None, None
+    token = _read(TOKEN_FILE)
+    if token and s.get("kaggle_user"):
+        USER, SOURCE = s["kaggle_user"], "app"
+        cfg = os.path.join(DATA, "kaggle-config")             # empty folder: the kaggle library looks there, not in ~/.kaggle
+        os.makedirs(cfg, exist_ok=True)
+        _set_env("KAGGLE_CONFIG_DIR", cfg)
+        if is_legacy(token):
+            _set_env("KAGGLE_USERNAME", USER)
+            _set_env("KAGGLE_KEY", token)
+        else:
+            _set_env("KAGGLE_API_TOKEN", token)
+    else:
+        tf = s.get("kaggle_token_file") or (OWNER_TOKEN_FILE if os.path.exists(OWNER_TOKEN_FILE) else None)
+        token = _read(tf) if tf else None
+        if token:
+            USER, SOURCE = s.get("kaggle_user") or OWNER_USER, "file"
+            # as before: an existing KAGGLE_API_TOKEN wins; own config dir, never ~/.kaggle
+            os.environ.setdefault("KAGGLE_API_TOKEN", token)
+            os.environ.setdefault("KAGGLE_CONFIG_DIR", os.path.dirname(os.path.expanduser(tf)))
+    KERNEL = f"{USER}/{SLUG}" if USER else None
+    return SOURCE is not None
+
+
+def signed_in():
+    return SOURCE is not None
+
+
+configure()
 
 
 def api():
     global _api
+    if not signed_in():
+        raise NotSignedIn("Sign in to Kaggle first (Settings).")
     if _api is None:
-        _api = KaggleApi()
-        _api.authenticate()
+        from kaggle.api.kaggle_api_extended import KaggleApi
+        a = KaggleApi()
+        try:
+            a.authenticate()
+        except SystemExit:                   # the kaggle library calls exit(1) when no credentials work
+            raise NotSignedIn("Kaggle did not accept the saved token. Sign in again in Settings.")
+        _api = a
     return _api
 
 
+# ------------------------------------------------------------------ sign-in (plain REST calls, the same ones kagglesdk makes)
+def _post(service_method, body, headers=None, timeout=30):
+    req = urllib.request.Request(f"{API}/{service_method}", data=json.dumps(body).encode(), method="POST",
+                                 headers={"Content-Type": "application/json", "User-Agent": "QwenImageStudio/1.0", **(headers or {})})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        return e.code, {}
+
+
+def check_token(user, token):
+    """Asks Kaggle whether the token works (read-only). Returns the real username or raises ValueError."""
+    user, token = parse_token(token, user)
+    if not token:
+        raise ValueError("Paste your Kaggle API token.")
+    if is_legacy(token):
+        if not user:
+            raise ValueError("Type your Kaggle username too (this kind of key needs it).")
+        auth = base64.b64encode(f"{user}:{token}".encode()).decode()
+        code, _ = _post("kernels.KernelsApiService/GetAcceleratorQuotaStatistics", {}, {"Authorization": "Basic " + auth})
+        if code != 200:
+            raise ValueError("Kaggle did not accept that username and key.")
+        return user, token
+    code, r = _post("security.OAuthService/IntrospectToken", {"token": token})
+    if code != 200 or not r.get("active") or not r.get("username"):
+        raise ValueError("Kaggle did not accept that token. Make a new one at kaggle.com/settings (API section).")
+    return r["username"], token
+
+
+def save_sign_in(user, token):
+    os.makedirs(DATA, exist_ok=True)
+    with open(TOKEN_FILE, "w", encoding="utf-8") as f:
+        f.write(token)
+    return configure()
+
+
+def sign_out():
+    try:
+        os.remove(TOKEN_FILE)
+    except FileNotFoundError:
+        pass
+    return configure()
+
+
+# ------------------------------------------------------------------ the kernel
 def kernel_source(key, topic, idle_min, max_hours, nsfw_repo="", nsfw_file=""):
     """The kernel script with its placeholders filled in (nothing is sent anywhere)."""
     src = open(os.path.join(HERE, "kaggle", "qis_server.py"), encoding="utf-8").read()
@@ -74,6 +199,8 @@ def push(key, topic, idle_min, max_hours, nsfw_repo="", nsfw_file=""):
 
 def status():
     """'running', 'queued', 'complete', 'error', 'cancel...', or 'none' if the kernel doesn't exist (Kaggle answers 403)."""
+    if not signed_in():
+        return "none"
     try:
         r = api().kernels_status(KERNEL)
         return str(getattr(r, "status", r)).lower().split(".")[-1]
@@ -84,6 +211,8 @@ def status():
 
 
 def delete():
+    if not signed_in():
+        return False
     try:
         api().kernels_delete(KERNEL, no_confirm=True)
         return True
@@ -117,7 +246,7 @@ if __name__ == "__main__":
     import sys
     cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
     if cmd == "status":
-        print(KERNEL, status())
+        print(KERNEL, SOURCE, status())
     elif cmd == "quota":
         print(quota())
     elif cmd == "delete":
